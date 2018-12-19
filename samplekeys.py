@@ -1,0 +1,1 @@
+tiingo_key='YOURKEYHERE'
