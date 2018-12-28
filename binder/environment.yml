@@ -1,7 +1,0 @@
-dependencies:
-  - matplotlib
-  - numpy
-  - pandas
-  - datetime
-  - decimal
-  - pandas_datareader
