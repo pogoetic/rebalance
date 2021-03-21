@@ -5,9 +5,13 @@ cwd = os.getcwd()
 outdir = cwd + '/output/'
 print(cwd)
 from pathlib import Path
+import matplotlib.pyplot as plt 
+
+
 
 key = ''
-f =  open(f'{Path(os.getcwd()).parent.absolute()}/data/tiingo.txt', "r")
+#f =  open(f'{Path(os.getcwd()).parent.absolute()}/data/tiingo.txt', "r")
+f = open(os.getcwd() + '/data/tiingo.txt', "r")
 key = f.read()
 print(key)
 tiingo_key = key
@@ -42,7 +46,9 @@ def build_initial_portfolios():
         ['XLV',0.1,'ETF'],
         ['IAU',0.1,'ETF'],
         ['TLT',0.1,'ETF'],
-        ['SHV',.1,'ETF'],
+        ['SHV',0.05,'ETF'],
+        ['HYG',0.05,'ETF'],
+
         ]
 
     # portfolio current holdings "c"
@@ -237,7 +243,6 @@ def build_execution_df():
     exec_port.to_csv(outdir +'exec_port.csv')
 
     def plot():
-        import matplotlib.pyplot as plt 
         graph_port = exec_port[['ticker','allocation','allocation_target','final_allocation']].copy()
         graph_port.plot.barh(x='ticker',figsize=(8,5))
         plt.show()
@@ -296,33 +301,44 @@ def catch_edge_cases():
     erroraccts = errordf.accountid.values
     print(erroraccts)
 
-    if len(errordf) > 0: 
-        for t in port[port.accountid.isin(erroraccts)].ticker.unique(): #Loop by security (not by account)
-            print("Correcting distribution for single-security accounts edge case: {}".format(t))
-            print('***** edge case found ******')
-            index = (port.accountid.isin(erroraccts)) & (port.ticker == t)
-            print(port[port.ticker == t])
-            #adjust numerator and denominator for proper recalculation of asset distribution across accounts
-            port.loc[index,'new_shares_n'] = port.new_shares_n - port.final_shares_chg_n
-            port.loc[index,'new_value_n'] = port.new_value_n - port.new_value_chg_n
-            port.loc[index,'final_shares_chg_n'] = 0
-            port.loc[index,'new_value_chg_n'] = 0
 
-            #remove from denominator
-            port.loc[port.ticker == t,'value'] = port.loc[port.ticker == t,'value'] - port[index].value_orig.sum()
-            
-            #recalculate values for this ticker
-            port.loc[port.ticker == t,'tick_alloc'] = port[port.ticker == t].value_orig / port[port.ticker == t].value
-            port.loc[index,'tick_alloc'] = 0 #set new money allocation to zero for funds with insufficient assets
-            port.loc[port.ticker == t,'final_shares_chg_n'] = port.final_shares_chg * port.tick_alloc
-            port.loc[port.ticker == t,'new_shares_n'] = port.shares + port.final_shares_chg_n
-            port.loc[port.ticker == t,'new_value_chg_n'] = port.new_value_chg * port.tick_alloc
-            port.loc[port.ticker == t,'new_value_n'] = port.value_orig + port.new_value_chg_n
-            port.loc[port.ticker == t,'final_allocation_n'] = (port.new_value_n / port.new_value) * port.final_allocation
-            
-            print(port[port.ticker == t])
 
-    #Cleanup
+
+    '''
+    @ fix: 
+    the final_allocation_n assigned to tickers found w in accounts in erroraccts ends up missing from df - for instance, 
+    the allocation to HYG + IAU is determined to sum to 14% but an error is thrown at assertion of 
+        assert(np.round(port.final_allocation.sum(),4)==1.0) 
+    as final_allocation.sum()==86% in same run -- commenting out the single security account edge case distribution correction solves
+    '''
+    # if len(errordf) > 0: 
+    #     for t in port[port.accountid.isin(erroraccts)].ticker.unique(): #Loop by security (not by account)
+    #         print("Correcting distribution for single-security accounts edge case: {}".format(t))
+    #         print('***** edge case found ******')
+    #         index = (port.accountid.isin(erroraccts)) & (port.ticker == t)
+    #         print(port[port.ticker == t])
+
+    #         #adjust numerator and denominator for proper recalculation of asset distribution across accounts
+    #         port.loc[index,'new_shares_n'] = port.new_shares_n - port.final_shares_chg_n
+    #         port.loc[index,'new_value_n'] = port.new_value_n - port.new_value_chg_n
+    #         port.loc[index,'final_shares_chg_n'] = 0
+    #         port.loc[index,'new_value_chg_n'] = 0
+
+    #         #remove from denominator
+    #         port.loc[port.ticker == t,'value'] = port.loc[port.ticker == t,'value'] - port[index].value_orig.sum()
+            
+    #         #recalculate values for this ticker
+    #         port.loc[port.ticker == t,'tick_alloc'] = port[port.ticker == t].value_orig / port[port.ticker == t].value
+    #         port.loc[index,'tick_alloc'] = 0 #set new money allocation to zero for funds with insufficient assets
+    #         port.loc[port.ticker == t,'final_shares_chg_n'] = port.final_shares_chg * port.tick_alloc
+    #         port.loc[port.ticker == t,'new_shares_n'] = port.shares + port.final_shares_chg_n
+    #         port.loc[port.ticker == t,'new_value_chg_n'] = port.new_value_chg * port.tick_alloc
+    #         port.loc[port.ticker == t,'new_value_n'] = port.value_orig + port.new_value_chg_n
+    #         port.loc[port.ticker == t,'final_allocation_n'] = (port.new_value_n / port.new_value) * port.final_allocation
+            
+    #         print(port[port.ticker == t])
+
+
     port['value'] = port.value_orig
     port['final_shares_chg'] = port.final_shares_chg_n
     port['new_shares'] = port.new_shares_n
@@ -331,7 +347,7 @@ def catch_edge_cases():
     port['final_allocation'] = port.final_allocation_n
     port.drop(['value_orig','tick_alloc','final_shares_chg_n','new_shares_n','new_value_n','new_value_chg_n','final_allocation_n'],axis=1,inplace=True)
     port.fillna({'value':0.0},inplace=True)
-    #Check our work
+
     print(port.final_allocation.sum())
     assert(np.round(port.final_allocation.sum(),4)==1.0)
     assert(np.round(np.sum((port.shares+port.final_shares_chg)-port.new_shares))==0)
@@ -341,95 +357,99 @@ def catch_edge_cases():
     print(port.columns)
 
     def plot():
-        x = port[['ticker','allocation','final_shares_chg_n','final_allocation_n']].copy()
+        x = port[['ticker','new_value_chg','final_shares_chg','final_allocation']].copy()
         x.plot.barh(x='ticker',figsize=(8,5))
         plt.show()
     #plot()
+
+    return port 
 
 port = catch_edge_cases()
 print(port.head())
 port.to_csv(outdir +'port4.csv')
 
 
+def tax_aware_allocator():
+
+    ''' tax consequence awareness  '''
+
+    #Finally, all new tickers need an account to land in
+    dport = None
+    acctsdf = None
+    if len(port[port.accounttype.isnull()])>0: #if we have none, skip this step
+        print('Distributing new securities to existing accounts . . .')
+        dport = port.copy()
+
+        #account-level fund surplus or deficit - must match these with our orphaned securities
+        acctsdf = port.groupby(['accountid','accounttype']).new_value_chg.sum()
+        acctsdf = acctsdf.reset_index().rename(columns={'new_value_chg':'new_value_chg_sum'})
+        #establish sort order so we can allocate tax-efficient account space first
+        actype_sortorder = pd.DataFrame(data=[['RIRA',1],['TIRA',2],['TAXB',3]],columns=['accounttype','order'])
+        acctsdf = pd.merge(acctsdf,actype_sortorder,how='left',left_on='accounttype',right_on='accounttype')
+
+
+        '''
+        @ todo: use a tier (A,B,C) apporach or decision tree to allocation in different account types iterating through each tier for most suitable placement
+        '''
+        #We make a consequential assumption here that any new_money_in will be allocated 100% in one of the Taxable accounts (first in list).
+        #if you have a Roth-IRA which has not met its contribution limits for the year, it may be preferrential to distribute the funds there first.
+        #IF YOU HAVE NO TAXABLE ACCOUNT AND YOU WISH TO REBALANCE WITH new_money_in > 0 this will cause errors - so we assert here:
+        assert(new_money_in == 0 or (len(acctsdf[acctsdf.accounttype == 'TAXB'])>0 and new_money_in > 0))
+        min_idx = acctsdf[acctsdf.accounttype == 'TAXB'].index.min()
+        acctsdf.loc[min_idx,'new_value_chg_sum'] = acctsdf.loc[min_idx,'new_value_chg_sum'] - new_money_in
+        #only return accounts that have space
+        acctsdf = acctsdf[acctsdf.new_value_chg_sum<0].copy()
+
+        '''
+        @ todo:
+        '''
+        #establish sort order so we can allocate tax-inefficient assets first
+        aclass_sortorder = pd.DataFrame(data=[['ST',3],['BD',1],['CS',4],['RE',2],['ALT',5]],columns=['assetclass','order'])
+        dport = pd.merge(dport,aclass_sortorder,how='left',left_on='assetclass',right_on='assetclass')
+
+        # !!!!! We loop twice, first to fit whole securities in accounts with tax location in mind, then again without tax location for anything leftover
+        loop = 0
+        while loop < 2:
+            loop+=1
+            #loop through orphaned tickers and place them in accounts until all assets are allocated or we are forced to split a security across accounts
+            #  in the first loop we do not allow tax-inefficient assets to wind up in Taxable accounts, in the second loop we relax this constraint
+            for index, row in dport[dport.accounttype.isnull()].sort_values(['order','new_value_chg'],ascending=[True,False]).iterrows():
+                #loop through accounts and place the assets
+                for i, r in acctsdf.iterrows():
+                    aid = r.accountid
+                    atype = r.accounttype
+                    bal = r.new_value_chg_sum
+                    #print('Evaluating {}-{} with {} starting bal'.format(aid,atype,bal))
+                    ### !!!!
+                    if loop == 0 and (row.assetclass in ('BD','RE') and atype == 'TAXB'):
+                        continue #skip this case, since we don't want to place Bonds and Real-Estate assets in Taxable accounts
+                    elif loop == 0 and (row.assetclass not in ('BD','RE') and atype != 'TAXB'):
+                        continue #skip this case, since we don't want to place tax-efficient assets into tax sheltered accounts 
+
+                    if row.new_value_chg + bal <=0: #it fits
+                        bal+=row.new_value_chg
+                        print(' FITS {} in {}-{} with {} remaining'.format(row.ticker,aid,atype,bal))
+                        #update our portfolio
+                        dport.loc[index,'accountid'] = aid
+                        dport.loc[index,'accounttype'] = atype
+                        #update account bal for next loop
+                        acctsdf.loc[i,'new_value_chg_sum'] = bal
+                        break
+                    else:
+                        print(' {} {} does not fit in {}-{}'.format(row.ticker,row.new_value_chg,aid,atype))
+        
+        print('\nLets see what remains in our accounts after 2 loops . . .')
+        print(acctsdf)
+
+    return acctsdf
+acctsdf = tax_aware_allocator()
 
 
 
 
-
-
-
+''' leftovers remaining '''
 
 '''
-
-
-#Finally, all new tickers need an account to land in
-dport = None
-acctsdf = None
-if len(port[port.accounttype.isnull()])>0: #if we have none, skip this step
-    print('Distributing new securities to existing accounts . . .')
-    dport = port.copy()
-
-    #account-level fund surplus or deficit - must match these with our orphaned securities
-    acctsdf = port.groupby(['accountid','accounttype']).new_value_chg.sum()
-    acctsdf = acctsdf.reset_index().rename(columns={'new_value_chg':'new_value_chg_sum'})
-    #establish sort order so we can allocate tax-efficient account space first
-    actype_sortorder = pd.DataFrame(data=[['RIRA',1],['TIRA',2],['TAXB',3]],columns=['accounttype','order'])
-    acctsdf = pd.merge(acctsdf,actype_sortorder,how='left',left_on='accounttype',right_on='accounttype')
-    #We make a consequential assumption here that any new_money_in will be allocated 100% in one of the Taxable accounts (first in list).
-    #if you have a Roth-IRA which has not met its contribution limits for the year, it may be preferrential to distribute the funds there first.
-    #IF YOU HAVE NO TAXABLE ACCOUNT AND YOU WISH TO REBALANCE WITH new_money_in > 0 this will cause errors - so we assert here:
-    assert(new_money_in == 0 or (len(acctsdf[acctsdf.accounttype == 'TAXB'])>0 and new_money_in > 0))
-    min_idx = acctsdf[acctsdf.accounttype == 'TAXB'].index.min()
-    acctsdf.loc[min_idx,'new_value_chg_sum'] = acctsdf.loc[min_idx,'new_value_chg_sum'] - new_money_in
-    #only return accounts that have space
-    acctsdf = acctsdf[acctsdf.new_value_chg_sum<0].copy()
-
-    #establish sort order so we can allocate tax-inefficient assets first
-    aclass_sortorder = pd.DataFrame(data=[['ST',3],['BD',1],['CS',4],['RE',2],['ALT',5]],columns=['assetclass','order'])
-    dport = pd.merge(dport,aclass_sortorder,how='left',left_on='assetclass',right_on='assetclass')
-
-    # !!!!! We loop twice, first to fit whole securities in accounts with tax location in mind, then again without tax location for anything leftover
-    loop = 0
-    while loop < 2:
-        loop+=1
-        #loop through orphaned tickers and place them in accounts until all assets are allocated or we are forced to split a security across accounts
-        #  in the first loop we do not allow tax-inefficient assets to wind up in Taxable accounts, in the second loop we relax this constraint
-        for index, row in dport[dport.accounttype.isnull()].sort_values(['order','new_value_chg'],ascending=[True,False]).iterrows():
-            #loop through accounts and place the assets
-            for i, r in acctsdf.iterrows():
-                aid = r.accountid
-                atype = r.accounttype
-                bal = r.new_value_chg_sum
-                #print('Evaluating {}-{} with {} starting bal'.format(aid,atype,bal))
-                ### !!!!
-                if loop == 0 and (row.assetclass in ('BD','RE') and atype == 'TAXB'):
-                    continue #skip this case, since we don't want to place Bonds and Real-Estate assets in Taxable accounts
-                elif loop == 0 and (row.assetclass not in ('BD','RE') and atype != 'TAXB'):
-                    continue #skip this case, since we don't want to place tax-efficient assets into tax sheltered accounts 
-
-                if row.new_value_chg + bal <=0: #it fits
-                    bal+=row.new_value_chg
-                    print(' FITS {} in {}-{} with {} remaining'.format(row.ticker,aid,atype,bal))
-                    #update our portfolio
-                    dport.loc[index,'accountid'] = aid
-                    dport.loc[index,'accounttype'] = atype
-                    #update account bal for next loop
-                    acctsdf.loc[i,'new_value_chg_sum'] = bal
-                    break
-                else:
-                    print(' {} {} does not fit in {}-{}'.format(row.ticker,row.new_value_chg,aid,atype))
-    
-    print('\nLets see what remains in our accounts after 2 loops . . .')
-    print(acctsdf)
-
-
-
-
-
-
-
-
-
 
     #Here we are forced to split a security across multiple accounts because no one account can fit it
     #  in this loop we allow tax-inefficient assets to wind up in Taxable accounts, but only as a last resort
