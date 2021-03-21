@@ -1,15 +1,9 @@
-#tiingo
-
 import sys, os
 cwd = os.getcwd()
 outdir = cwd + '/output/'
 print(cwd)
 from pathlib import Path
 import matplotlib.pyplot as plt 
-
-
-
-key = ''
 #f =  open(f'{Path(os.getcwd()).parent.absolute()}/data/tiingo.txt', "r")
 f = open(os.getcwd() + '/data/tiingo.txt', "r")
 key = f.read()
@@ -26,13 +20,33 @@ from pandas_datareader import data as pdr
 
 now = datetime.datetime.now()
 
+'''
+@todo:
+~write this using oop~
+0 input to track contributions made to TIRA & RIRA < max
+0 input for employer_match == True
+1 rebal_algo: tolerance, target
+2 rebal_type: relative, absolute
+3 liquidate / raise capital functions
+'''
+
+
 # params
-new_money_in = 1000
+new_money_in = 1000 
 drift = 0.05
 min_hold_days = 90
 
 
 def build_initial_portfolios():
+    """
+    build pandas df for current and target allocations
+    :param: new_money_in ~ amount of dollars to deploy
+    :type: 
+    :param: min_hold_days ~ min n days rquired to hold position prior to re allocating its %
+    :type: 
+    :return: 
+    :rtype: tuple(pd.DataFrame)
+    """
 
     # portfolio targets "t"
     columns_t = ['ticker','allocation_target','assetclass']
@@ -108,6 +122,15 @@ agg_port.to_csv(outdir +'agg_port.csv')
 @todo: use pandas market calendar to determine n days from now to yesterday, start, & end
 '''
 def retrieve_latest_security_price():
+    """
+            ~ retrieve tiingo data to build historical time series ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
+    """
     now = datetime.datetime.now()
     yesterday = now - datetime.timedelta(3)
     start = datetime.datetime(yesterday.year, yesterday.month, yesterday.day)
@@ -130,7 +153,15 @@ ohlc = ohlc.to_frame(name='close').reset_index(level=1, drop=True)
 
 
 def  build_initial_drift_df():
-    #concatenate target allocation and latest prices with our portfolio
+    """
+            ~ retrieve tiingo data to build historical time series ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
+    """
     start_port_c = pd.merge(agg_port, targetalloc, on ='ticker', how ='outer')
     final_port = pd.merge(start_port_c, ohlc, left_on ='ticker', right_index = True, how = 'left')
     # NaN values represent positions included in the target that do not exist in the current; fill  these values as 0 
@@ -150,6 +181,16 @@ final_port.to_csv(outdir +'final_port.csv')
 
 
 def build_initial_order_df():
+    """
+            ~ retrieve tiingo data to build historical time series ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
+    """
+    
     '''
     final_port above represents the most naive of potential rebalances  - this is the initial stable df for intuition to be developed on top of
     '''
@@ -222,6 +263,15 @@ below: adjust those new_shares_n to account for tax considerations that result f
 '''
 
 def build_execution_df():
+    """
+            ~ retrieve tiingo data to build historical time series ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
+    """
     #Merge our rebalanced portfolio with our stable portfolio for our execution portfolio
     stable_port['value_chg'] = 0
     stable_port['shares_chg']=0
@@ -256,6 +306,15 @@ exec_port.to_csv(outdir +'exec_port.csv')
 
 
 def merge_drift_and_execution():
+    """
+            ~ retrieve tiingo data to build historical time series ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
+    """
     #Join in our rebalanced portfolio and determine how to split value across accounts for a given ticker
     port = pd.merge(start_port[['accounttype','accountid','ticker','shares']], 
                     exec_port[['ticker','assetclass','close','value','final_shares_chg','new_shares','new_value','new_value_chg','final_allocation']], 
@@ -280,6 +339,15 @@ port.to_csv(outdir +'port3.csv')
 
 
 def catch_edge_cases():
+    """
+            ~ retrieve tiingo data to build historical time series ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
+    """
 
     #Recalculate the values proportionately
     port['final_shares_chg_n'] = port.final_shares_chg * port.tick_alloc
@@ -369,28 +437,35 @@ print(port.head())
 port.to_csv(outdir +'port4.csv')
 
 
+
 def tax_aware_allocator():
+    """
+            ~   tax consequence pseudo-awareness     ~
+    :param: 
+    :type: 
+    :param: 
+    :type: 
+    :return: 
+    :rtype: 
 
-    ''' tax consequence awareness  '''
+        
+    @ todo update to account for curreent contributions < max, employer match, acct holder age, etc.
+    @ todo: use a tier (A,B,C) apporach or decision tree to allocation in different account types iterating through each tier for most suitable placement
+    # establish sort order so we can allocate tax-efficient account space first
 
-    #Finally, all new tickers need an account to land in
+    """
     dport = None
     acctsdf = None
-    if len(port[port.accounttype.isnull()])>0: #if we have none, skip this step
+    print(port)
+    '''allocate a final % for each ticker that exists in target allocation df, but does not exist as current position, else skip'''
+    if len(port[port.accounttype.isnull()])>0: 
         print('Distributing new securities to existing accounts . . .')
         dport = port.copy()
-
         #account-level fund surplus or deficit - must match these with our orphaned securities
         acctsdf = port.groupby(['accountid','accounttype']).new_value_chg.sum()
         acctsdf = acctsdf.reset_index().rename(columns={'new_value_chg':'new_value_chg_sum'})
-        #establish sort order so we can allocate tax-efficient account space first
         actype_sortorder = pd.DataFrame(data=[['RIRA',1],['TIRA',2],['TAXB',3]],columns=['accounttype','order'])
         acctsdf = pd.merge(acctsdf,actype_sortorder,how='left',left_on='accounttype',right_on='accounttype')
-
-
-        '''
-        @ todo: use a tier (A,B,C) apporach or decision tree to allocation in different account types iterating through each tier for most suitable placement
-        '''
         #We make a consequential assumption here that any new_money_in will be allocated 100% in one of the Taxable accounts (first in list).
         #if you have a Roth-IRA which has not met its contribution limits for the year, it may be preferrential to distribute the funds there first.
         #IF YOU HAVE NO TAXABLE ACCOUNT AND YOU WISH TO REBALANCE WITH new_money_in > 0 this will cause errors - so we assert here:
@@ -447,6 +522,9 @@ acctsdf = tax_aware_allocator()
 
 
 
+
+def allocate_leftovers():
+    pass
 ''' leftovers remaining '''
 
 '''
