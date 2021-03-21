@@ -3,3 +3,6 @@
 __pycache__
 .DS_Store
 /private
+
+data/
+output/
